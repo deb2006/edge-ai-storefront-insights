@@ -1,402 +1,72 @@
-# F2C Analytics Panel - Retail Intelligence Dashboard
+# Heterogeneous Edge-Vision & Cloud-Intelligence Retail Framework
 
-A production-ready Streamlit web application for real-time store analytics, combining computer vision telemetry from NVIDIA Jetson Orin Nano edge devices with POS transaction data via Supabase.
-
----
-
-## 📋 Overview
-
-The F2C Analytics Panel provides store managers and executives with a modern, dark-themed dashboard for monitoring:
-
-- **Live Store Traffic**: Real-time footfall velocity and cumulative visitor count
-- **Gross Revenue**: Aggregated transaction volumes from POS systems
-- **Conversion KPI**: Calculated hourly conversion rates (transactions ÷ footfall)
-- **Node Heartbeat**: Edge device connectivity status and telemetry streaming
-
-### System Architecture
-
-```
-EDGE LAYER (Jetson Orin Nano)
-    ↓ HTTPS streaming (DeepStream + occupancy metrics)
-SUPABASE (PostgreSQL Data Lake)
-    ├── f2c_footfall_raw (edge sensor data)
-    ├── f2c_pos_sales (transaction logs)
-    └── v_hourly_conversion_kpi (computed view)
-    ↓ REST API
-STREAMLIT FRONTEND (Port 8501)
-    └── Real-time Analytics Dashboard
-```
+An asymmetric, end-to-end analytical pipeline that merges high-throughput edge computer vision tracking with conversational cloud business intelligence. This system isolates processing planes, running low-latency edge inference on-premise while leveraging serverless cloud LLM compilation to drive conversational database querying with zero hosting overhead.
 
 ---
 
-## 🚀 Quick Start
+## 🏗️ Architectural Topology & Core Data Flow
 
-### Prerequisites
+The framework operates via an asymmetric allocation of AI labor, ensuring zero cloud bandwidth bloat for video processing coupled with zero local compute requirements for semantic reasoning:
 
-- Python 3.9+ installed
-- `.env` file with Supabase credentials (included)
-- Active Supabase project with configured tables
-
-### Installation
-
-1. **Navigate to project directory:**
-   ```bash
-   cd path/to/f2c_bridge
-   ```
-
-2. **Create a Python virtual environment:**
-   ```bash
-   # Windows
-   python -m venv venv
-   venv\Scripts\activate
-
-   # macOS/Linux
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Verify `.env` file exists with credentials:**
-   ```bash
-   cat .env
-   # Should output:
-   # SUPABASE_URL=your_supabase_project_url
-   # SUPABASE_KEY=your_supabase_anon_or_service_role_key
-   ```
-
-5. **Run the Streamlit app:**
-   ```bash
-   streamlit run app.py
-   ```
-
-   The dashboard will open automatically at: **http://localhost:8501**
+1. **Edge Perception Layer (NVIDIA Compute):** An NVIDIA Jetson Orin Nano processes live storefront video matrices locally (utilizing OpenCV / DeepStream vector layers). It strips out network bandwidth bloat by crunching complex pixel imagery right at the source, compressing raw video frames down into lightweight numerical integers (e.g., `live_occupancy: 14`).
+2. **Telemetry Ingestion Bridge:** An unbuffered background Python data daemon captures local edge metrics from the storefront node and dispatches structured event payloads upstream via secure HTTPS requests.
+3. **Analytical Matrix & View Engine:** A cloud-hosted Supabase (PostgreSQL) data lake aggregates incoming streaming telemetry (`f2c_footfall_raw`) and bridges spatial traffic logs directly against Point-of-Sale transaction records (`f2c_pos_sales`) through specialized database relations (`v_hourly_conversion_kpi`).
+4. **Conversational Orchestration Console:** A centralized Streamlit web console provides executive analytics screens alongside a secure, natural language text interface powered by the `google-genai` SDK running `gemini-2.5-flash-lite`.
 
 ---
 
-## 📊 Dashboard Components
+## 💬 Operational Mechanics: The Conversational Chat Loop
 
-### Panel 1: Executive KPI Scorecard (Top Row)
-Four key metrics in high-contrast cards:
+When an executive inputs an abstract query (e.g., *"How was our footfall yesterday afternoon?"*), the system avoids sending massive historical data sets or arbitrary code blocks. Instead, it coordinates state transitions across a strict three-step lifecycle:
 
-| Metric | Source | Description |
-|--------|--------|-------------|
-| **Total Store Traffic** | `f2c_footfall_raw.cumulative_footfall` | Maximum cumulative visitor count |
-| **Gross Revenue Volume** | `f2c_pos_sales.sale_amount` | Sum of all transactions |
-| **Conversion Rate** | `v_hourly_conversion_kpi` | Avg hourly conversion % (transactions ÷ footfall) |
-| **Node Heartbeat** | Latest `f2c_footfall_raw` timestamp | Device status (🟢 Online/🟡 Stale/🔴 Offline) |
+### Step 1: Translating the Question to SQL (Semantic Compilation)
+When a user submits a question via the Streamlit interface (`st.chat_input`), the app packages the phrase and routes it to the `gemini-2.5-flash-lite` model. This request includes the core database structure and structural schema hints, but containing **zero actual row records**:
+> *"Here are the columns in my f2c_footfall_raw and f2c_pos_sales tables. Translate this question into a read-only PostgreSQL query."*
 
-### Panel 2: Real-Time Trend Grid (66% / 33% Split)
+Gemini utilizes its language comprehension capabilities to behave as a deterministic compiler, translating the user's abstract temporal intent into a optimized, valid SQL query targeting our cloud database schemas.
 
-**Left: Conversion Performance Chart**
-- Interactive line chart with area fill
-- X-axis: Chronological hourly buckets
-- Y-axis: Conversion rate percentage
-- Built with Plotly for interactivity (hover, zoom, pan)
+### Step 2: Pulling the Live Data from Supabase (Data Extraction)
+The Streamlit application intercepts the generated SQL payload from the model, executes an internal string-matching safety routine, and dispatches the query directly against the Supabase PostgreSQL data lake using secure project environment credentials. 
 
-**Right: Live Edge Telemetry Table**
-- Last 10 footfall sensor readings
-- Columns: Timestamp, Device ID, Live Occupancy, Cumulative Total
-- Real-time updates every 5 seconds
+Supabase scans its indexed tables, evaluates the live telemetry vectors, compiles the relational dataset, and returns a raw, condensed JSON array back to the active Streamlit runtime.
 
-### Panel 3: Analytical Deep-Dive (Full Width)
+### Step 3: Summarizing the Results (Natural Language Synthesis)
+The Streamlit app captures the raw rows returned by the database engine and pipes them back to Gemini for final contextual synthesis:
+> *"The database returned these raw rows. Summarize these specific numbers into a single, friendly, executive-level sentence for our retail console."*
 
-- Complete `v_hourly_conversion_kpi` view data
-- **Filtering**: Date range slider for temporal exploration
-- **Sorting**: Multi-column sortable (descending)
-- **Statistics**: Auto-generated summary (mean, std, min, max)
+Gemini reads the concise dataset matrix and responds with an operational, human-readable summary (e.g., *"Yesterday, the 'Orin_Nano_Kengeri' device recorded a total of 63 cumulative footfalls with an optimized conversion delta."*), which is rendered natively inside the Streamlit chat layout.
 
 ---
 
-## 🔧 Configuration
+## 🛡️ Sandbox Security & SQL Injection Guardrails
 
-### Environment Variables (`.env`)
+To enforce absolute database isolation and guarantee that user prompts cannot mutate or corrupt structural schemas, the pipeline deploys a multi-layered gateway architecture:
+
+* **Semantic Decoupling:** The AI model has zero direct write paths, execution access, or open socket channels to the database instance; it functions purely as an external code compiler generating text strings.
+* **In-Flight Ingestion Filter:** The Streamlit controller intercepts the model's generated text payload before it reaches the cloud data lake, verifying the query against an explicit local keyword blocklist targeting structural mutations (`DROP`, `DELETE`, `UPDATE`, `INSERT`, `ALTER`, `TRUNCATE`).
+* **Database RPC Isolation:** Validated SQL read strings are piped exclusively through a highly isolated Supabase database remote procedure call (`execute_read_only_sql`), running under restricted read-only role permissions to completely eliminate unauthorized execution vectors.
+
+---
+
+## 🛠️ Stack Composition Matrix
+
+* **Edge Core Hardware:** NVIDIA Jetson Orin Nano
+* **Cloud Infrastructure & Data Lake:** Supabase / PostgreSQL Engine
+* **UI Orchestration Frame:** Streamlit Framework
+* **Cloud Intelligence Client:** Google GenAI SDK (`gemini-2.5-flash-lite`) utilizing strict Pydantic JSON schema generation modes.
+* **Core Language Runtime:** Python 3.10+
+
+---
+
+## ⚙️ Configuration & Local Deployment
+
+To run this project locally, establish your private environment configurations within a root `.env` file. 
 
 ```ini
-# Supabase REST API Credentials
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_KEY=your_supabase_anon_or_service_role_key
+# Core AI Endpoint Configuration
+GEMINI_API_KEY=your_google_ai_studio_api_key
+
+# Supabase Cloud Database Credentials
+SUPABASE_URL=your_supabase_project_reference_url
+SUPABASE_KEY=your_supabase_anon_or_service_role_token
 ```
-
-### Data Refresh Settings
-
-Edit `app.py` to customize cache TTL:
-
-```python
-CACHE_TTL = 5  # Refresh database queries every 5 seconds
-```
-
-Lower values = more frequent updates (higher API load)
-Higher values = fewer API calls (slightly stale data)
-
----
-
-## 📦 Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `streamlit` | 1.28.1 | Web framework & UI components |
-| `supabase` | 2.0.3 | PostgreSQL REST client |
-| `pandas` | 2.1.3 | Data manipulation & analysis |
-| `plotly` | 5.18.0 | Interactive charting |
-| `python-dotenv` | 1.0.0 | Environment variable loading |
-
----
-
-## 🛡️ Error Handling & Fault Tolerance
-
-The dashboard gracefully handles common failure scenarios:
-
-### Network Errors
-- ✅ Missing Supabase connection → Warning message displayed
-- ✅ Missing columns in database → Fallback calculation logic
-- ✅ Slow API responses → Data cached for 5 seconds
-
-### Data Errors
-- ✅ Empty result sets → Info messages ("No data available yet")
-- ✅ Schema mutations → Dynamic column detection
-- ✅ Type mismatches → Automatic type conversion
-
-### UI Resilience
-- ✅ Sidebar collapsed by default (reduces clutter)
-- ✅ Manual refresh button for on-demand updates
-- ✅ Timestamp display shows last cache update time
-- ✅ Color-coded status indicators (🟢/🟡/🔴)
-
----
-
-## 🎨 Customization
-
-### Theming
-
-The dashboard uses a dark theme optimized for executive display panels. To modify colors, edit the CSS in `app.py`:
-
-```python
-st.markdown("""
-<style>
-    [data-testid="stMetricValue"] {
-        color: #00d9ff;  # Cyan accent color
-    }
-</style>
-""", unsafe_allow_html=True)
-```
-
-### Metric Calculations
-
-Modify KPI calculations in `calculate_kpi_metrics()`:
-
-```python
-def calculate_kpi_metrics() -> Tuple[int, float, float, str]:
-    # Adjust thresholds, aggregation logic, or data sources here
-```
-
----
-
-## 📈 Performance Tips
-
-1. **Optimize Database View**: Ensure `v_hourly_conversion_kpi` has proper indexes
-2. **Connection Pooling**: Supabase client is cached via `@st.cache_resource`
-3. **Data Caching**: All queries cached for 5 seconds (configurable)
-4. **Lazy Loading**: Tables rendered only when visible
-5. **Monitor Port 8501**: Streamlit runs on port 8501 by default
-
----
-
-## 🚢 Deployment Options
-
-### Option 1: Local Development
-```bash
-streamlit run app.py
-```
-
-### Option 2: Streamlit Cloud
-1. Push code to GitHub repository
-2. Visit [share.streamlit.io](https://share.streamlit.io)
-3. Deploy from repo with environment secrets configured
-
-### Option 3: Docker Containerization
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-EXPOSE 8501
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
-```
-
-Build and run:
-```bash
-docker build -t f2c-analytics .
-docker run -p 8501:8501 --env-file .env f2c-analytics
-```
-
-### Option 4: Production Hosting (Heroku/AWS/GCP)
-1. Ensure port binding: `streamlit run app.py --server.port=$PORT`
-2. Mount `.env` as secrets in deployment platform
-3. Set `STREAMLIT_SERVER_HEADLESS=true` for servers
-
----
-
-## 📊 Database Schema Reference
-
-### `f2c_footfall_raw` Table
-```sql
-CREATE TABLE f2c_footfall_raw (
-    id BIGINT PRIMARY KEY,
-    timestamp TIMESTAMPTZ DEFAULT now(),
-    device_id VARCHAR,
-    live_occupancy INT,
-    cumulative_footfall INT
-);
-```
-
-### `f2c_pos_sales` Table
-```sql
-CREATE TABLE f2c_pos_sales (
-    transaction_id VARCHAR PRIMARY KEY,
-    timestamp TIMESTAMPTZ,
-    sale_amount NUMERIC
-);
-```
-
-### `v_hourly_conversion_kpi` View (Example)
-```sql
-CREATE VIEW v_hourly_conversion_kpi AS
-SELECT
-    DATE_TRUNC('hour', f.timestamp) as hour,
-    COUNT(DISTINCT p.transaction_id) as transactions,
-    MAX(f.cumulative_footfall) as footfall,
-    (COUNT(DISTINCT p.transaction_id)::FLOAT / NULLIF(MAX(f.cumulative_footfall), 0) * 100) as conversion_rate
-FROM f2c_footfall_raw f
-LEFT JOIN f2c_pos_sales p ON DATE_TRUNC('hour', f.timestamp) = DATE_TRUNC('hour', p.timestamp)
-GROUP BY DATE_TRUNC('hour', f.timestamp)
-ORDER BY hour DESC;
-```
-
----
-
-## 🔐 Security Best Practices
-
-✅ **DO:**
-- Keep `.env` file in `.gitignore` (never commit)
-- Use Row-Level Security (RLS) policies on Supabase tables
-- Restrict API key scopes to minimal permissions
-- Rotate Supabase keys quarterly
-- Use environment variable secrets in production
-
-❌ **DON'T:**
-- Hardcode credentials in source code
-- Commit `.env` to public repositories
-- Share API keys in emails or Slack
-- Use production keys in development
-- Expose dashboard on public networks without authentication
-
----
-
-## 🆘 Troubleshooting
-
-### Dashboard won't load
-```
-Solution: Check Supabase URL and key in .env
-$ streamlit run app.py --logger.level=debug
-```
-
-### "No data available" message
-```
-Solution: Verify tables exist and contain data
-$ supabase inspection list-tables  # Check Supabase project
-```
-
-### Slow performance / high latency
-```
-Solution: 
-1. Increase CACHE_TTL to 10-15 seconds
-2. Verify Supabase indexes on timestamp columns
-3. Check network connectivity
-```
-
-### Port 8501 already in use
-```
-Solution: Use custom port
-$ streamlit run app.py --server.port=8502
-```
-
----
-
-## 📝 File Structure
-
-```
-f2c_bridge/
-├── app.py                    # Main Streamlit application (MAIN ENTRY POINT)
-├── mainbridge_copy.py        # Legacy bridge script (data ingestion)
-├── requirements.txt          # Python dependencies
-├── .env                      # Environment credentials (secure)
-├── .gitignore               # Git ignore configuration
-└── README.md                # This documentation
-```
-
----
-
-## 🤝 Integration with Edge Layer
-
-### Receiving Jetson Orin Data
-
-The `mainbridge_copy.py` script receives edge telemetry via HTTP POST:
-
-```python
-# Example edge device payload
-payload = {
-    "device_id": "Orin_Nano_Kengeri",
-    "occupancy": 7,           # Current live occupancy
-    "total_footfall": 63      # Cumulative count
-}
-
-# Sent to Supabase via HTTPS
-supabase.table("f2c_footfall_raw").insert({
-    "device_id": payload["device_id"],
-    "live_occupancy": payload["occupancy"],
-    "cumulative_footfall": payload["total_footfall"]
-}).execute()
-```
-
-Ensure edge devices are configured to POST to this endpoint continuously.
-
----
-
-## 📞 Support & Troubleshooting
-
-For issues or questions:
-1. Check Supabase project dashboard for table structure
-2. Verify API key permissions (RLS policies)
-3. Enable debug logging: `streamlit run app.py --logger.level=debug`
-4. Review Streamlit documentation: https://docs.streamlit.io
-5. Supabase docs: https://supabase.com/docs
-
----
-
-## 📄 License & Attribution
-
-**F2C Analytics Panel** © 2025 AIROWIRE NETWORKS PRIVATE LIMITED
-
-Built with:
-- 🎨 Streamlit - Web UI framework
-- 🗄️ Supabase - PostgreSQL backend
-- 📊 Plotly - Interactive visualizations
-- 🐼 Pandas - Data processing
-
----
-
-## 🎯 Version Info
-
-- **Application Version**: 1.0.0
-- **Last Updated**: 2025-05-18
-- **Streamlit Version**: 1.28.1+
-- **Python Version**: 3.9+
-
----
-
-**Ready to monitor your retail operations in real-time!** 🚀📊
