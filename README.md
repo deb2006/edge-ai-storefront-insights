@@ -64,8 +64,8 @@ STREAMLIT FRONTEND (Port 8501)
    ```bash
    cat .env
    # Should output:
-   # SUPABASE_URL=https://mfuqfpibknywivtculxk.supabase.co
-   # SUPABASE_KEY=eyJhbGciOi...
+   # SUPABASE_URL=your_supabase_project_url
+   # SUPABASE_KEY=your_supabase_anon_or_service_role_key
    ```
 
 5. **Run the Streamlit app:**
@@ -117,8 +117,8 @@ Four key metrics in high-contrast cards:
 
 ```ini
 # Supabase REST API Credentials
-SUPABASE_URL=https://mfuqfpibknywivtculxk.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_or_service_role_key
 ```
 
 ### Data Refresh Settings

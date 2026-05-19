@@ -482,7 +482,7 @@ SUPABASE CLIENT
 HTTP REQUESTS
     │
     ├─→ Header: Authorization: Bearer [JWT]
-    ├─→ Endpoint: https://mfuqfpibknywivtculxk.supabase.co/rest/v1
+    ├─→ Endpoint: https://your_supabase_project_url.supabase.co/rest/v1
     │
     ▼
 SUPABASE RLS POLICIES

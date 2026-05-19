@@ -92,8 +92,8 @@ cat .env
 
 Should display:
 ```
-SUPABASE_URL=https://mfuqfpibknywivtculxk.supabase.co
-SUPABASE_KEY=eyJhbGciOi...
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_or_service_role_key
 ```
 
 ### Step 4: Launch Application

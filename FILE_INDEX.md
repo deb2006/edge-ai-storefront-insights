@@ -121,8 +121,8 @@ pip install -r requirements.txt
 
 **Contents:**
 ```ini
-SUPABASE_URL=https://mfuqfpibknywivtculxk.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_or_service_role_key
 ```
 
 **Security:**
