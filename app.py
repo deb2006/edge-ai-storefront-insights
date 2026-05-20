@@ -20,7 +20,7 @@ from dotenv import load_dotenv
 from supabase import create_client, Client
 from google import genai  # type: ignore
 from google.genai import types  # type: ignore
-
+import httpx
 # SSL verification bypass (for testing only - NOT for production)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -72,7 +72,9 @@ SUPABASE_SQL_RPC_PARAM = _os_module.getenv("SUPABASE_SQL_RPC_PARAM", "query_text
 client = None
 if GEMINI_API_KEY:
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        # Create an httpx client that disables SSL verification (useful in corporate proxy environments)
+        http_client = httpx.Client(verify=False, timeout=60)
+        client = genai.Client(api_key=GEMINI_API_KEY, http_client=http_client)
     except Exception as e:
         print(f"CRITICAL GEMINI INIT ERROR: {e}")
         pass
