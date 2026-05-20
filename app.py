@@ -970,6 +970,7 @@ Allowed targets:
    - completed_sales int8
    - revenue numeric
    - conversion_rate_percentage numeric
+    - NOTE: When querying v_hourly_conversion_kpi, you must reference the column report_hour (not timestamp).
 
 Rules:
 - Generate read-only PostgreSQL only.
