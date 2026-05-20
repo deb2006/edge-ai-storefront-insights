@@ -73,7 +73,8 @@ client = None
 if GEMINI_API_KEY:
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-    except:
+    except Exception as e:
+        print(f"CRITICAL GEMINI INIT ERROR: {e}")
         pass
 
 if not SUPABASE_URL or not SUPABASE_KEY:
@@ -640,7 +641,7 @@ def calculate_kpi_metrics() -> Tuple[int, float, float, str]:
     Returns: (total_traffic, gross_revenue, conversion_rate, node_status)
     """
     
-    # Total Store Traffic (max total_footfall from view)
+    # Total Store Traffic (sum total_footfall from view)
     kpi_df = fetch_hourly_kpi_data()
     total_traffic = 0
     gross_revenue = 0.0
@@ -649,7 +650,7 @@ def calculate_kpi_metrics() -> Tuple[int, float, float, str]:
     if kpi_df is not None and len(kpi_df) > 0:
         # Use view columns: total_footfall, revenue, conversion_rate_percent
         if "total_footfall" in kpi_df.columns:
-            total_traffic = int(kpi_df["total_footfall"].max())
+            total_traffic = int(kpi_df["total_footfall"].sum())
         
         if "revenue" in kpi_df.columns:
             gross_revenue = float(kpi_df["revenue"].sum())
@@ -900,7 +901,7 @@ def generate_sql_with_gemini(user_question: str) -> str:
     Available database assets:
     1. Table: f2c_footfall_raw (timestamp, device_id, live_occupancy, cumulative_footfall)
     2. Table: f2c_pos_sales (transaction_id, timestamp, sale_amount)
-    3. View: v_hourly_conversion_kpi (Pre-calculated temporal traffic vectors, total sales, and conversion rates grouped by hour)
+    3. View: v_hourly_conversion_kpi (report_hour, total_footfall, completed_sales, revenue, conversion_rate_percentage)
     CRITICAL: You must return ONLY a raw JSON object matching the requested schema. Do not include markdown code block syntax formatting wrappers.
     """
     
@@ -962,8 +963,11 @@ Allowed targets:
    - timestamp timestamptz
    - sale_amount numeric
 3. v_hourly_conversion_kpi
-   - pre-aggregated hourly conversion metrics, including traffic vectors,
-     sales totals, and conversion rates.
+   - report_hour timestamptz
+   - total_footfall int4
+   - completed_sales int8
+   - revenue numeric
+   - conversion_rate_percentage numeric
 
 Rules:
 - Generate read-only PostgreSQL only.
@@ -1065,9 +1069,9 @@ def fallback_sql_from_question(question: str) -> Optional[str]:
     if "conversion" in q or "convert" in q:
         return f"""
         SELECT
-            ROUND((SUM(completed_sales)::numeric / NULLIF(MAX(total_footfall), 0)) * 100, 2)
+            ROUND((SUM(completed_sales)::numeric / NULLIF(SUM(total_footfall), 0)) * 100, 2)
                 AS conversion_rate_percentage,
-            MAX(total_footfall) AS total_footfall,
+            SUM(total_footfall) AS total_footfall,
             SUM(completed_sales) AS completed_sales,
             SUM(revenue) AS revenue
         FROM v_hourly_conversion_kpi
@@ -1086,7 +1090,7 @@ def fallback_sql_from_question(question: str) -> Optional[str]:
     if "footfall" in q or "traffic" in q:
         return f"""
         SELECT
-            MAX(total_footfall) AS total_footfall
+            SUM(total_footfall) AS total_footfall
         FROM v_hourly_conversion_kpi
         {date_filter}
         """
