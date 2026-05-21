@@ -70,10 +70,10 @@ SUPABASE_SQL_RPC_PARAM = _os_module.getenv("SUPABASE_SQL_RPC_PARAM", "query_text
 
 # Initialize unified Google GenAI client
 client = None
+MODEL_NAME = "gemini-2.5-flash-lite"
 if GEMINI_API_KEY:
     try:
-        # Directly instantiate the GenerativeModel. The SDK reads GEMINI_API_KEY from the environment.
-        client = genai.GenerativeModel("gemini-2.5-flash-lite")
+        client = genai.Client(api_key=GEMINI_API_KEY)
     except Exception as e:
         print(f"CRITICAL GEMINI INIT ERROR: {e}")
         pass
@@ -857,7 +857,7 @@ def render_analytical_deep_dive():
                 """,
                 unsafe_allow_html=True,
             )
-            st.dataframe(filtered_df, use_container_width=True, height=500)
+            st.dataframe(filtered_df, width='stretch', height=500)
 
             st.markdown("### Summary")
 
@@ -873,11 +873,11 @@ def render_analytical_deep_dive():
                     """,
                     unsafe_allow_html=True,
                 )
-                st.dataframe(filtered_df.transpose(), use_container_width=True)
+                st.dataframe(filtered_df.transpose(), width='stretch')
             else:
                 numeric_summary = filtered_df.describe(include="number")
                 if not numeric_summary.empty:
-                    st.dataframe(numeric_summary, use_container_width=True)
+                    st.dataframe(numeric_summary, width='stretch')
                 else:
                     st.info("No numeric columns are available for summary statistics.")
         except Exception as e:
@@ -909,17 +909,41 @@ def generate_sql_with_gemini(user_question: str) -> str:
     
     for attempt in range(3):
         try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash-lite',
-                contents=f"User question: {user_question}\n\nReturn a JSON object with a single key 'sql' containing the PostgreSQL query.",
+            # Use the chat-style API: create a chat session with the system instruction
+            chat = client.chats.create(
+                model=MODEL_NAME,
                 config=types.GenerateContentConfig(
                     system_instruction=schema_context,
                     response_mime_type="application/json",
-                    temperature=0.1
-                )
+                    temperature=0.1,
+                ),
             )
-            data_response = json.loads(response.text)
-            return data_response.get("sql", "")
+            response = chat.send_message(
+                f"User question: {user_question}\n\nReturn a JSON object with a single key 'sql' containing the PostgreSQL query."
+            )
+
+            # Prefer parsed response when available, otherwise fall back to text
+            text = None
+            if getattr(response, 'parsed', None):
+                try:
+                    # parsed may already be a dict/pydantic model
+                    parsed = response.parsed
+                    if isinstance(parsed, dict):
+                        return parsed.get("sql", "")
+                    # If it's a pydantic model, try to convert to dict
+                    try:
+                        parsed_dict = parsed.model_dump()  # type: ignore[attr-defined]
+                        return parsed_dict.get("sql", "")
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+            text = response.text if getattr(response, 'text', None) else None
+            if text:
+                data_response = json.loads(text)
+                return data_response.get("sql", "")
+            return ""
         except Exception as e:
             # Catch rate limiting or service drops, wait, and retry
             if "429" in str(e) or "503" in str(e):
@@ -937,11 +961,26 @@ def synthesize_natural_response(user_question: str, raw_db_data: list) -> str:
     
     for attempt in range(3):
         try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash-lite',
-                contents=prompt
-            )
-            return response.text
+            chat = client.chats.create(model=MODEL_NAME)
+            response = chat.send_message(prompt)
+
+            # If the SDK provided a parsed object or text, prefer text for freeform answers
+            if getattr(response, 'text', None):
+                return response.text
+            if getattr(response, 'parsed', None):
+                try:
+                    parsed = response.parsed
+                    # If parsed is a pydantic model or dict, stringify reasonably
+                    if isinstance(parsed, dict):
+                        return json.dumps(parsed)
+                    try:
+                        return json.dumps(parsed.model_dump())  # type: ignore[attr-defined]
+                    except Exception:
+                        return str(parsed)
+                except Exception:
+                    pass
+
+            return str(raw_db_data)
         except Exception as e:
             if "429" in str(e) or "503" in str(e):
                 time.sleep(2)
@@ -1246,7 +1285,7 @@ def render_ai_data_assistant():
         def clear_chat_history():
             st.session_state.messages = []
         
-        st.button("🗑️ Clear Chat", key="clear_chat_history_btn", use_container_width=True, on_click=clear_chat_history)
+        st.button("🗑️ Clear Chat", key="clear_chat_history_btn", width='stretch', on_click=clear_chat_history)
     st.caption("Ask about footfall, occupancy, sales, revenue, or conversion performance.")
 
     if "messages" not in st.session_state:
@@ -1328,7 +1367,7 @@ def render_ai_data_assistant():
                 with st.expander("SQL used"):
                     st.code(message["sql"], language="sql")
             if message.get("rows"):
-                st.dataframe(pd.DataFrame(message["rows"]), use_container_width=True)
+                st.dataframe(pd.DataFrame(message["rows"]), width='stretch')
 
 
 def main():
@@ -1354,7 +1393,7 @@ def main():
     # Add refresh button
     col_refresh, col_status = st.columns([1, 5])
     with col_refresh:
-        if st.button("Refresh Data", use_container_width=True):
+        if st.button("Refresh Data", width='stretch'):
             st.cache_data.clear()
             st.rerun()
     
