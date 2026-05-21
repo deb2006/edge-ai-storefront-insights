@@ -11,7 +11,7 @@ import json
 import re
 import ssl
 import urllib3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List, Tuple
 import streamlit as st
 import pandas as pd
@@ -72,9 +72,8 @@ SUPABASE_SQL_RPC_PARAM = _os_module.getenv("SUPABASE_SQL_RPC_PARAM", "query_text
 client = None
 if GEMINI_API_KEY:
     try:
-        # Create an httpx client that disables SSL verification (useful in corporate proxy environments)
-        http_client = httpx.Client(verify=False, timeout=60)
-        client = genai.Client(api_key=GEMINI_API_KEY, http_client=http_client)
+        # Directly instantiate the GenerativeModel. The SDK reads GEMINI_API_KEY from the environment.
+        client = genai.GenerativeModel("gemini-2.5-flash-lite")
     except Exception as e:
         print(f"CRITICAL GEMINI INIT ERROR: {e}")
         pass
@@ -616,6 +615,7 @@ def get_node_heartbeat_status() -> Dict[str, str]:
             # Check if data is recent (within last 2 minutes)
             if timestamp:
                 last_update = pd.to_datetime(timestamp)
+                # Keep both datetimes tz-naive to avoid mismatch errors
                 time_diff = datetime.utcnow() - last_update.replace(tzinfo=None)
                 
                 if time_diff < timedelta(minutes=2):
@@ -777,7 +777,7 @@ def render_trend_and_telemetry():
                         ),
                         margin=dict(l=40, r=20, t=56, b=40)
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width='stretch')
                 else:
                     st.info("No conversion rate data available")
             except Exception as e:
@@ -801,7 +801,7 @@ def render_trend_and_telemetry():
                     "cumulative_footfall": "Total"
                 })
                 
-                st.dataframe(display_df, use_container_width=True, height=400)
+                st.dataframe(display_df, width='stretch', height=400)
             except Exception as e:
                 st.warning(f"⚠️ Error rendering telemetry table: {e}")
         else:
