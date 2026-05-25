@@ -12,6 +12,7 @@ import re
 import ssl
 import urllib3
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Optional, Dict, List, Tuple
 import streamlit as st
 import pandas as pd
@@ -596,6 +597,169 @@ def fetch_sales_data() -> Optional[pd.DataFrame]:
 
 
 @st.cache_data(ttl=CACHE_TTL)
+def fetch_infrastructure_health_data() -> Optional[pd.DataFrame]:
+    """
+    Fetch edge device observability telemetry from f2c_system_observability.
+    Returns the latest health metrics and device sensor readings.
+    """
+    try:
+        response = (
+            supabase.table("f2c_system_observability")
+            .select("*")
+            .order("timestamp_raw", desc=True)
+            .limit(50)
+            .execute()
+        )
+
+        if not response.data:
+            st.warning("⚠️ No observability data returned from f2c_system_observability")
+            return None
+
+        df = pd.DataFrame(response.data)
+        if "timestamp_raw" in df.columns:
+            df["timestamp_raw"] = pd.to_datetime(df["timestamp_raw"])
+        return df
+
+    except Exception as e:
+        show_notice_once(
+            "error",
+            "observability_fetch",
+            f"Edge observability data is unavailable. {friendly_exception_message(e)}",
+        )
+        return None
+
+
+def render_edge_node_infrastructure_health() -> None:
+    """Render the Edge Node Infrastructure Health observability panel."""
+    st.markdown("## Edge Node Infrastructure Health")
+    st.caption(
+        "Live edge node health metrics from the observability stream."
+    )
+
+    df = fetch_infrastructure_health_data()
+    if df is None or df.empty:
+        st.info("Observability telemetry has not yet arrived for this node.")
+        return
+
+    if "timestamp_raw" in df.columns:
+        df = df.sort_values("timestamp_raw", ascending=False)
+    latest = df.iloc[0]
+
+    node_id = (
+        latest.get("device_id")
+        or latest.get("node_id")
+        or latest.get("edge_id")
+        or "Unknown"
+    )
+    # Derive status from timestamp_raw age instead of looking for non-existent status column
+    status = "🔴 Offline"
+    try:
+        latest_timestamp = pd.to_datetime(latest.get("timestamp_raw"))
+        # Keep both datetimes tz-naive to avoid mismatch errors
+        time_diff = datetime.utcnow() - latest_timestamp.replace(tzinfo=None)
+        if time_diff < timedelta(minutes=2):
+            status = "🟢 Online"
+        else:
+            status = "🟡 Stale"
+    except Exception:
+        status = "🔴 Offline"
+
+
+    cpu_temp = (
+        latest.get("cpu_temperature")
+        or latest.get("cpu_temp")
+        or latest.get("cpu_temp_c")
+        or latest.get("cpu_temp_celsius")
+    )
+    gpu_temp = (
+        latest.get("gpu_temperature")
+        or latest.get("gpu_temp")
+        or latest.get("gpu_temp_c")
+        or latest.get("gpu_temp_celsius")
+    )
+    gpu_util = (
+        latest.get("gpu_utilization")
+        or latest.get("gpu_util")
+        or latest.get("gpu_pct")
+        or latest.get("gpu_usage")
+    )
+
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        render_metric_card("Node Identifier", str(node_id), "Latest active edge node", "ND")
+    with col2:
+        render_metric_card(
+            "Device Status",
+            str(status),
+            "Most recent node health state",
+            "OK" if str(status).lower() in ("online", "healthy", "ok") else "⚠️",
+        )
+    with col3:
+        render_metric_card(
+            "CPU Temp",
+            f"{cpu_temp}°C" if cpu_temp is not None else "N/A",
+            "Latest CPU temperature",
+            "C1",
+        )
+    with col4:
+        render_metric_card(
+            "GPU Temp",
+            f"{gpu_temp}°C" if gpu_temp is not None else "N/A",
+            "Latest GPU temperature",
+            "G1",
+        )
+
+    st.markdown("### GPU Utilization & Temperature Trends")
+    ts_df = df.copy()
+    if "timestamp_raw" in ts_df.columns:
+        ts_df["timestamp_ist"] = pd.to_datetime(ts_df["timestamp_raw"])
+        if ts_df["timestamp_ist"].dt.tz is None:
+            ts_df["timestamp_ist"] = ts_df["timestamp_ist"].dt.tz_localize("UTC")
+        ts_df["timestamp_ist"] = ts_df["timestamp_ist"].dt.tz_convert("Asia/Kolkata")
+        ts_df["timestamp_display"] = ts_df["timestamp_ist"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        ts_df = ts_df.set_index("timestamp_display")
+
+    gpu_columns = [
+        col
+        for col in ts_df.columns
+        if col.lower() in ("gpu_utilization", "gpu_util", "gpu_pct", "gpu_usage")
+    ]
+    temp_columns = [
+        col
+        for col in ts_df.columns
+        if col.lower() in (
+            "cpu_temperature",
+            "cpu_temp",
+            "cpu_temp_c",
+            "cpu_temp_celsius",
+            "gpu_temperature",
+            "gpu_temp",
+            "gpu_temp_c",
+            "gpu_temp_celsius",
+        )
+    ]
+
+    col_temp, col_gpu = st.columns(2)
+    if gpu_columns:
+        col_gpu.line_chart(ts_df[gpu_columns].tail(25), use_container_width=True)
+    else:
+        col_gpu.info("GPU utilization series not available in observability data.")
+
+    if temp_columns:
+        col_temp.line_chart(ts_df[temp_columns].tail(25), use_container_width=True)
+    else:
+        col_temp.info("CPU/GPU temperature series not available in observability data.")
+
+    st.markdown("### Recent Observability Records")
+    table_df = df.copy()
+    if "timestamp_raw" in table_df.columns:
+        table_df["timestamp_raw"] = pd.to_datetime(table_df["timestamp_raw"], utc=True)
+        table_df["timestamp_raw"] = table_df["timestamp_raw"].dt.tz_convert(ZoneInfo("Asia/Kolkata"))
+        table_df["timestamp_raw"] = table_df["timestamp_raw"].dt.strftime("%Y-%m-%d %H:%M:%S")
+    st.dataframe(table_df.head(10), use_container_width=True)
+
+
+@st.cache_data(ttl=CACHE_TTL)
 def get_node_heartbeat_status() -> Dict[str, str]:
     """
     Check node connectivity status by fetching the most recent footfall entry.
@@ -734,10 +898,25 @@ def render_trend_and_telemetry():
                 # Ensure proper sorting
                 if "hour" in kpi_df.columns:
                     kpi_df = kpi_df.sort_values("hour")
+                    kpi_df["hour_ist"] = pd.to_datetime(kpi_df["hour"])
+                    if kpi_df["hour_ist"].dt.tz is None:
+                        kpi_df["hour_ist"] = kpi_df["hour_ist"].dt.tz_localize("UTC")
+                    kpi_df["hour_ist"] = kpi_df["hour_ist"].dt.tz_convert("Asia/Kolkata")
+                    kpi_df["hour_display"] = kpi_df["hour_ist"].dt.strftime("%Y-%m-%d %H:%M:%S")
+                    x_axis = kpi_df["hour_display"]
+                elif "report_hour" in kpi_df.columns:
+                    kpi_df = kpi_df.sort_values("report_hour")
+                    kpi_df["report_hour_ist"] = pd.to_datetime(kpi_df["report_hour"])
+                    if kpi_df["report_hour_ist"].dt.tz is None:
+                        kpi_df["report_hour_ist"] = kpi_df["report_hour_ist"].dt.tz_localize("UTC")
+                    kpi_df["report_hour_ist"] = kpi_df["report_hour_ist"].dt.tz_convert("Asia/Kolkata")
+                    kpi_df["report_hour_display"] = kpi_df["report_hour_ist"].dt.strftime("%Y-%m-%d %H:%M:%S")
+                    x_axis = kpi_df["report_hour_display"]
+                else:
+                    x_axis = kpi_df.index
                 
                 conversion_columns = ["conversion_rate_percent", "conversion_rate_percentage", "conversion_rate"]
                 conversion_col = next((col for col in conversion_columns if col in kpi_df.columns), None)
-                x_axis = kpi_df.get("hour", kpi_df.get("report_hour", kpi_df.index))
                 
                 if conversion_col is not None:
                     fig = go.Figure()
@@ -904,6 +1083,16 @@ def generate_sql_with_gemini(user_question: str) -> str:
     1. Table: f2c_footfall_raw (timestamp, device_id, live_occupancy, cumulative_footfall)
     2. Table: f2c_pos_sales (transaction_id, timestamp, sale_amount)
     3. View: v_hourly_conversion_kpi (report_hour, total_footfall, completed_sales, revenue, conversion_rate_percentage)
+    4. Table: public.f2c_system_observability (device_id, timestamp_raw, ram_usage_gb, gpu_utilization, cpu_temperature, gpu_temperature)
+    CRITICAL: The current year is 2026. When the user asks for metrics regarding specific dates or days (e.g., 'May 21st', 'today', 'yesterday'), you MUST interpret and write your SQL queries using the year 2026 (e.g., '2026-05-21').
+    CRITICAL POSTGRES TYPE-CASTING RULE: If you perform date comparisons or date truncations (such as checking for 'today' or a specific date string) against text/varchar timestamp columns, you MUST explicitly cast the column to a timestamp type first using the double-colon cast notation (e.g., column_name::timestamp or column_name::timestamptz).
+    Example format:
+    WHERE date_trunc('day', "timestamp_raw"::timestamptz) = '2026-05-25'
+    CRITICAL JOIN RULE: When combining independent summary metrics from multiple distinct tables or CTE subqueries (such as total revenue and maximum purchase flags) into a final single-row response output, you MUST use an explicit CROSS JOIN or LEFT JOIN syntax instead of a comma-separated implicit join.
+    Example format required:
+    SELECT ds.total_footfall, ds.total_revenue, me.sale_amount
+    FROM DailySummary ds
+    CROSS JOIN MostExpensive me;
     CRITICAL: You must return ONLY a raw JSON object matching the requested schema. Do not include markdown code block syntax formatting wrappers.
     """
     
@@ -1412,6 +1601,9 @@ def main():
         st.divider()
         
         render_analytical_deep_dive()
+        st.divider()
+        
+        render_edge_node_infrastructure_health()
         
     except Exception as e:
         st.error(f"❌ Dashboard error: {e}")
