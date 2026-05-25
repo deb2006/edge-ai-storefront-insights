@@ -712,11 +712,13 @@ def render_edge_node_infrastructure_health() -> None:
     st.markdown("### GPU Utilization & Temperature Trends")
     ts_df = df.copy()
     if "timestamp_raw" in ts_df.columns:
-        ts_df["timestamp_ist"] = pd.to_datetime(ts_df["timestamp_raw"])
-        if ts_df["timestamp_ist"].dt.tz is None:
-            ts_df["timestamp_ist"] = ts_df["timestamp_ist"].dt.tz_localize("UTC")
-        ts_df["timestamp_ist"] = ts_df["timestamp_ist"].dt.tz_convert("Asia/Kolkata")
-        ts_df["timestamp_display"] = ts_df["timestamp_ist"].dt.strftime("%Y-%m-%d %H:%M:%S")
+        # Force conversion to datetime, strip any latent timezone tags, and manually inject the +5:30 offset
+        ts_df["timestamp_display"] = pd.to_datetime(ts_df["timestamp_raw"]).dt.tz_localize(None)
+        ts_df["timestamp_display"] = ts_df["timestamp_display"] + pd.Timedelta(hours=5, minutes=30)
+        # Sort by datetime value before any string conversion
+        ts_df = ts_df.sort_values("timestamp_display", ascending=True)
+        # Convert to string format to force chart display of actual text values
+        ts_df["timestamp_display"] = ts_df["timestamp_display"].dt.strftime("%H:%M:%S")
         ts_df = ts_df.set_index("timestamp_display")
 
     gpu_columns = [
